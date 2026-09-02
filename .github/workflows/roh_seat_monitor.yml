@@ -1,11 +1,8 @@
 name: ROH Seat Monitor
 
 on:
-  schedule:
-    # Runs every 5 minutes (GitHub's minimum granularity for scheduled
-    # workflows). Cron is UTC. Des Commite
-    - cron: "2-59/5 * * * *"
-  workflow_dispatch: {}  # lets you trigger a manual run from the Actions tab
+  workflow_dispatch: {}  # triggered externally (Azure Function) via the GitHub API,
+                          # and can also be run manually from the Actions tab
 
 jobs:
   check-seats:
@@ -29,9 +26,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: last_state.json
-          key: roh-state-${{ github.run_id }}
-          restore-keys: |
-            roh-state-
+          key: roh-state-fixed
 
       - name: Run seat check
         env:
@@ -39,10 +34,19 @@ jobs:
           COOKIE_HEADER: ${{ secrets.COOKIE_HEADER }}
         run: python roh_seat_monitor.py
 
-      # Saves the updated last_state.json so next run can diff against it.
+      # GitHub's cache is write-once per key, so to keep just ONE cache
+      # entry (instead of accumulating one per run) we delete the old
+      # one under this key before saving the fresh state. "|| true"
+      # means a missing cache (first-ever run) doesn't fail the step.
+      - name: Delete old seat state cache
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh cache delete roh-state-fixed || true
+
       - name: Save seat state
         if: always()
         uses: actions/cache/save@v4
         with:
           path: last_state.json
-          key: roh-state-${{ github.run_id }}
+          key: roh-state-fixed
