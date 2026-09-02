@@ -40,9 +40,9 @@ URL = "https://www.rbo.org.uk/api/v2-proxy/TXN/Performances/74463/Seats?constitu
 COOKIE_HEADER = os.environ.get("COOKIE_HEADER", "")
 
 # A seat is treated as "available" when HoldCodeId == this value.
-# Observed: HoldCodeId 0 = no hold (available), 460 = held/sold/blocked.
-# If alerts seem wrong once real seats free up, tell me and we'll
-# adjust this against a fresh sample.
+# Confirmed against the live seatmap: HoldCodeId 0 means available
+# regardless of SeatStatusId — SeatStatusId varies by seat category
+# (13 for standard seats, 0 for upper slip seats), not by availability.
 AVAILABLE_HOLD_CODE_ID = 0
 
 # ntfy.sh topic name -- pick something unique/hard to guess, e.g.
@@ -129,11 +129,63 @@ def check_once():
     STATE_FILE.write_text(json.dumps({"seat_ids": list(current_ids)}))
 
 
+def summarize():
+    """Fetches live data and prints counts grouped by the fields that
+    likely determine visual availability on the seatmap, so we can
+    figure out why our count doesn't match what the map shows."""
+    from collections import Counter
+
+    data = fetch_seats()
+    seats = data if isinstance(data, list) else data.get("Seats", data)
+
+    total = len(seats)
+    is_seat_true = sum(1 for s in seats if s.get("IsSeat"))
+    is_seat_false = total - is_seat_true
+
+    hold_counts = Counter(s.get("HoldCodeId") for s in seats if s.get("IsSeat"))
+    status_counts = Counter(s.get("SeatStatusId") for s in seats if s.get("IsSeat"))
+    screen_counts = Counter(s.get("ScreenId") for s in seats if s.get("IsSeat"))
+    section_counts = Counter(s.get("SectionId") for s in seats if s.get("IsSeat"))
+
+    # Cross-tab: for each HoldCodeId, which SeatStatusIds appear with it
+    combo_counts = Counter(
+        (s.get("HoldCodeId"), s.get("SeatStatusId"))
+        for s in seats if s.get("IsSeat")
+    )
+
+    print(f"Total entries: {total}")
+    print(f"IsSeat=True: {is_seat_true}   IsSeat=False: {is_seat_false}")
+    print()
+    print("Counts by HoldCodeId (among IsSeat=True):")
+    for k, v in sorted(hold_counts.items(), key=lambda x: -x[1]):
+        print(f"  HoldCodeId={k}: {v}")
+    print()
+    print("Counts by SeatStatusId (among IsSeat=True):")
+    for k, v in sorted(status_counts.items(), key=lambda x: -x[1]):
+        print(f"  SeatStatusId={k}: {v}")
+    print()
+    print("Counts by ScreenId:")
+    for k, v in sorted(screen_counts.items(), key=lambda x: -x[1]):
+        print(f"  ScreenId={k}: {v}")
+    print()
+    print("Counts by SectionId (top 15):")
+    for k, v in sorted(section_counts.items(), key=lambda x: -x[1])[:15]:
+        print(f"  SectionId={k}: {v}")
+    print()
+    print("HoldCodeId x SeatStatusId combinations:")
+    for (h, st), v in sorted(combo_counts.items(), key=lambda x: -x[1]):
+        print(f"  HoldCodeId={h}, SeatStatusId={st}: {v}")
+
+
 def main():
     if "--inspect" in sys.argv:
         data = fetch_seats()
         print(json.dumps(data, indent=2)[:3000])
         print("\n... (truncated if longer). Use this to confirm field names.")
+        return
+
+    if "--summarize" in sys.argv:
+        summarize()
         return
 
     if "--loop" in sys.argv:
