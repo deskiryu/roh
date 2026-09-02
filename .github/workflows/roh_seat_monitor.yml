@@ -3,7 +3,7 @@ name: ROH Seat Monitor
 on:
   schedule:
     # Runs every 5 minutes (GitHub's minimum granularity for scheduled
-    # workflows). Cron is UTC.
+    # workflows). Cron is UTC. Des Commite
     - cron: "*/5 * * * *"
   workflow_dispatch: {}  # lets you trigger a manual run from the Actions tab
 
