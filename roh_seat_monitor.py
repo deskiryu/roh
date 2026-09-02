@@ -39,11 +39,19 @@ URL = "https://www.rbo.org.uk/api/v2-proxy/TXN/Performances/74463/Seats?constitu
 # Headers -> Cookie.
 COOKIE_HEADER = os.environ.get("COOKIE_HEADER", "")
 
-# A seat is treated as "available" when HoldCodeId == this value.
-# Confirmed against the live seatmap: HoldCodeId 0 means available
-# regardless of SeatStatusId — SeatStatusId varies by seat category
-# (13 for standard seats, 0 for upper slip seats), not by availability.
-AVAILABLE_HOLD_CODE_ID = 0
+# A seat is treated as "available" when SeatStatusId == this value.
+# CONFIRMED from ROH's own ReferenceData/SeatStatuses endpoint:
+#   0  = AVL "Available"        <- this is what we want
+#   13 = TKD "Ticketed"          (already sold/booked - NOT available)
+#   4  = HLD "Held"
+#   5  = NIA "Not In Allocation"
+#   6  = BLK "Blacked Out"
+#   7  = RUP "Reserved, Unpaid"
+#   8  = RPD "Reserved, Paid"
+# Earlier versions of this script had the polarity backwards (treating
+# HoldCodeId==0 or SeatStatusId==13 as available), which is why counts
+# were wildly inflated. This is the authoritative fix.
+AVAILABLE_SEAT_STATUS_ID = 0
 
 # ntfy.sh topic name -- pick something unique/hard to guess, e.g.
 # "roh-perf74463-desmond-x9k2". Set via NTFY_TOPIC env var / GitHub
@@ -83,14 +91,15 @@ def send_notification(message):
 def extract_available_seats(data):
     """
     Returns a dict of {seat_id: "RowLetter SeatNumber"} for every seat
-    currently available (HoldCodeId == AVAILABLE_HOLD_CODE_ID).
+    currently available. Per ROH's own ReferenceData/SeatStatuses,
+    SeatStatusId 0 = "AVL" (Available) is the correct signal.
     """
     seats = data if isinstance(data, list) else data.get("Seats", data)
     available = {}
     for s in seats:
         if not s.get("IsSeat"):
             continue
-        if s.get("HoldCodeId") == AVAILABLE_HOLD_CODE_ID:
+        if s.get("SeatStatusId") == AVAILABLE_SEAT_STATUS_ID:
             label = f"Row {s.get('SeatRow')}, Seat {s.get('SeatNumber')}"
             available[s["Id"]] = label
     return available
