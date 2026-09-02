@@ -1,8 +1,21 @@
 name: ROH Seat Monitor
 
 on:
-  workflow_dispatch: {}  # triggered externally (Azure Function) via the GitHub API,
-                          # and can also be run manually from the Actions tab
+  workflow_dispatch:  # triggered externally (Azure Function) via the GitHub API,
+                       # and can also be run manually from the Actions tab
+    inputs:
+      performance_id:
+        description: "ROH performance ID"
+        required: false
+        default: "74463"
+      price_min:
+        description: "Minimum ticket price to alert on"
+        required: false
+        default: "35"
+      price_max:
+        description: "Maximum ticket price to alert on"
+        required: false
+        default: "39"
 
 jobs:
   check-seats:
@@ -19,34 +32,39 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      # Restores last_state.json from the previous run so we can tell
-      # whether new seats appeared since last time. Without this, every
-      # run would look like a "first run" and never alert.
+      # Restores last_state_<performanceId>.json from the previous run
+      # for this performance so we can tell whether new seats appeared
+      # since last time. Keyed per performance so monitoring several
+      # shows at once doesn't mix up their baselines.
       - name: Restore seat state
         uses: actions/cache/restore@v4
         with:
-          path: last_state.json
-          key: roh-state-fixed
+          path: last_state_${{ github.event.inputs.performance_id || '74463' }}.json
+          key: roh-state-${{ github.event.inputs.performance_id || '74463' }}
 
       - name: Run seat check
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           COOKIE_HEADER: ${{ secrets.COOKIE_HEADER }}
+          PERFORMANCE_ID: ${{ github.event.inputs.performance_id }}
+          TARGET_PRICE_MIN: ${{ github.event.inputs.price_min }}
+          TARGET_PRICE_MAX: ${{ github.event.inputs.price_max }}
         run: python roh_seat_monitor.py
 
       # GitHub's cache is write-once per key, so to keep just ONE cache
-      # entry (instead of accumulating one per run) we delete the old
-      # one under this key before saving the fresh state. "|| true"
-      # means a missing cache (first-ever run) doesn't fail the step.
+      # entry per performance (instead of accumulating one per run) we
+      # delete the old one under this key before saving the fresh
+      # state. "|| true" means a missing cache (first-ever run for
+      # this performance) doesn't fail the step.
       - name: Delete old seat state cache
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh cache delete roh-state-fixed || true
+        run: gh cache delete roh-state-${{ github.event.inputs.performance_id || '74463' }} || true
 
       - name: Save seat state
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: last_state.json
-          key: roh-state-fixed
+          path: last_state_${{ github.event.inputs.performance_id || '74463' }}.json
+          key: roh-state-${{ github.event.inputs.performance_id || '74463' }}

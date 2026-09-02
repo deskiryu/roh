@@ -30,7 +30,28 @@ import sys
 from pathlib import Path
 
 # ----------------- CONFIG -----------------
-URL = "https://www.rbo.org.uk/api/v2-proxy/TXN/Performances/74463/Seats?constituentId=0&modeOfSaleId=10&performanceId=74463"
+# All of these can be overridden via environment variables / GitHub
+# Actions inputs, so the same script works for any future performance
+# without editing code.
+PERFORMANCE_ID = os.environ.get("PERFORMANCE_ID", "74463")
+
+URL = (
+    f"https://www.rbo.org.uk/api/v2-proxy/TXN/Performances/{PERFORMANCE_ID}/Seats"
+    f"?constituentId=0&modeOfSaleId=10&performanceId={PERFORMANCE_ID}"
+)
+
+PRICES_URL = (
+    "https://www.rbo.org.uk/api/v2-proxy/TXN/Performances/Prices"
+    f"?expandPerformancePriceType=&includeOnlyBasePrice=&modeOfSaleId=10"
+    f"&performanceIds={PERFORMANCE_ID}&priceTypeId=&sourceId=108"
+)
+
+# Only alert on seats in zones where a ticket is currently offered
+# within this price range (inclusive). Set via the Prices endpoint
+# each run so it stays correct even if ROH changes which zones are on
+# sale at these prices. Defaults to 39/39 to match earlier behaviour.
+TARGET_PRICE_MIN = float(os.environ.get("TARGET_PRICE_MIN", "39"))
+TARGET_PRICE_MAX = float(os.environ.get("TARGET_PRICE_MAX", "39"))
 
 # This endpoint returned data without a login cookie, so auth isn't
 # needed. If that ever changes (HTTP 401/403), set a COOKIE_HEADER
@@ -59,7 +80,7 @@ AVAILABLE_SEAT_STATUS_ID = 0
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "CHANGE-ME-roh-alert")
 
 POLL_SECONDS = 120  # only used in --loop mode (local/manual runs)
-STATE_FILE = Path(__file__).parent / "last_state.json"
+STATE_FILE = Path(__file__).parent / f"last_state_{PERFORMANCE_ID}.json"
 # -------------------------------------------
 
 
@@ -76,6 +97,36 @@ def fetch_seats():
     return resp.json()
 
 
+def fetch_prices():
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; SeatMonitor/1.0)",
+        "Accept": "application/json",
+    }
+    if COOKIE_HEADER:
+        headers["Cookie"] = COOKIE_HEADER
+
+    resp = requests.get(PRICES_URL, headers=headers, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_target_price_zone_ids(prices):
+    """
+    Returns the set of ZoneIds where a ticket priced within
+    [TARGET_PRICE_MIN, TARGET_PRICE_MAX] is currently enabled for sale,
+    under any price type. A zone can carry multiple price-type rows
+    (e.g. general public vs. a concession rate); we want the zone if
+    ANY of its enabled rows fall in range.
+    """
+    return {
+        p["ZoneId"]
+        for p in prices
+        if p.get("Enabled") is True
+        and p.get("Price") is not None
+        and TARGET_PRICE_MIN <= p["Price"] <= TARGET_PRICE_MAX
+    }
+
+
 def send_notification(message):
     try:
         requests.post(
@@ -88,26 +139,37 @@ def send_notification(message):
         print(f"[warn] failed to send notification: {e}")
 
 
-def extract_available_seats(data):
+def extract_available_seats(data, target_zone_ids=None):
     """
     Returns a dict of {seat_id: "RowLetter SeatNumber"} for every seat
     currently available. Per ROH's own ReferenceData/SeatStatuses,
     SeatStatusId 0 = "AVL" (Available) is the correct signal.
+    If target_zone_ids is given, only seats in those zones are included
+    (used to restrict to seats currently priced within the target range).
     """
     seats = data if isinstance(data, list) else data.get("Seats", data)
     available = {}
     for s in seats:
         if not s.get("IsSeat"):
             continue
-        if s.get("SeatStatusId") == AVAILABLE_SEAT_STATUS_ID:
-            label = f"Row {s.get('SeatRow')}, Seat {s.get('SeatNumber')}"
-            available[s["Id"]] = label
+        if s.get("SeatStatusId") != AVAILABLE_SEAT_STATUS_ID:
+            continue
+        if target_zone_ids is not None and s.get("ZoneId") not in target_zone_ids:
+            continue
+        label = f"Row {s.get('SeatRow')}, Seat {s.get('SeatNumber')}"
+        available[s["Id"]] = label
     return available
 
 
 def check_once():
     """Single check-and-alert pass. This is what GitHub Actions runs each
     time the scheduled workflow fires — check, alert if needed, exit."""
+    price_label = (
+        f"\u00a3{TARGET_PRICE_MIN:g}"
+        if TARGET_PRICE_MIN == TARGET_PRICE_MAX
+        else f"\u00a3{TARGET_PRICE_MIN:g}-\u00a3{TARGET_PRICE_MAX:g}"
+    )
+
     prev_ids = set()
     first_run = not STATE_FILE.exists()
     if STATE_FILE.exists():
@@ -116,22 +178,28 @@ def check_once():
         except Exception:
             prev_ids = set()
 
+    prices = fetch_prices()
+    target_zone_ids = get_target_price_zone_ids(prices)
+    print(f"  (zones currently offering {price_label}: {len(target_zone_ids)})")
+
     data = fetch_seats()
-    available = extract_available_seats(data)
+    available = extract_available_seats(data, target_zone_ids)
     current_ids = set(available.keys())
-    print(f"[{time.strftime('%H:%M:%S')}] available seats detected: {len(current_ids)}")
+    print(f"[{time.strftime('%H:%M:%S')}] available {price_label} seats detected: {len(current_ids)}")
 
     new_ids = current_ids - prev_ids
     if new_ids and not first_run:
         labels = ", ".join(available[i] for i in sorted(new_ids))
         send_notification(
-            f"{len(new_ids)} new seat(s) available for performance 74463: {labels}"
+            f"{len(new_ids)} new {price_label} seat(s) available for performance "
+            f"{PERFORMANCE_ID}: {labels}"
         )
         print(f"  -> ALERT sent: {labels}")
     elif first_run:
         send_notification(
-            f"Monitor is live for performance 74463. Baseline: {len(current_ids)} seat(s) "
-            f"currently available. You'll be alerted when new ones open up."
+            f"Monitor is live for performance {PERFORMANCE_ID} ({price_label} seats). "
+            f"Baseline: {len(current_ids)} seat(s) currently available. "
+            f"You'll be alerted when new ones open up."
         )
         print("  -> first run: baseline established, confirmation notification sent")
 
