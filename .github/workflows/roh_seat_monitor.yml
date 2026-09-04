@@ -11,7 +11,7 @@ on:
       price_min:
         description: "Minimum ticket price to alert on"
         required: false
-        default: "35"
+        default: "39"
       price_max:
         description: "Maximum ticket price to alert on"
         required: false
@@ -20,6 +20,15 @@ on:
 jobs:
   check-seats:
     runs-on: ubuntu-latest
+    # Ensures only one run executes at a time per performance. Without
+    # this, frequent triggers (e.g. every 30s from Azure) can overlap —
+    # a run that's still executing when the next one starts will race
+    # it for the same cache key and fail with "another job may be
+    # creating this cache". Queuing (rather than canceling) keeps every
+    # check's result, just run one after another instead of in parallel.
+    concurrency:
+      group: roh-seat-monitor-${{ github.event.inputs.performance_id || '74463' }}
+      cancel-in-progress: false
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
