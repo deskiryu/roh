@@ -44,12 +44,15 @@ jobs:
       # Restores last_state_<performanceId>.json from the previous run
       # for this performance so we can tell whether new seats appeared
       # since last time. Keyed per performance so monitoring several
-      # shows at once doesn't mix up their baselines.
+      # shows at once doesn't mix up their baselines. "v2" suffix: an
+      # earlier version of this key got a stuck/orphaned reservation
+      # from overlapping runs before the concurrency fix was added;
+      # bumping the key sidesteps it rather than waiting it out.
       - name: Restore seat state
         uses: actions/cache/restore@v4
         with:
           path: last_state_${{ github.event.inputs.performance_id || '74463' }}.json
-          key: roh-state-${{ github.event.inputs.performance_id || '74463' }}
+          key: roh-state-v2-${{ github.event.inputs.performance_id || '74463' }}
 
       - name: Run seat check
         env:
@@ -69,11 +72,11 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh cache delete roh-state-${{ github.event.inputs.performance_id || '74463' }} || true
+        run: gh cache delete roh-state-v2-${{ github.event.inputs.performance_id || '74463' }} || true
 
       - name: Save seat state
         if: always()
         uses: actions/cache/save@v4
         with:
           path: last_state_${{ github.event.inputs.performance_id || '74463' }}.json
-          key: roh-state-${{ github.event.inputs.performance_id || '74463' }}
+          key: roh-state-v2-${{ github.event.inputs.performance_id || '74463' }}
