@@ -27,7 +27,7 @@ jobs:
     # creating this cache". Queuing (rather than canceling) keeps every
     # check's result, just run one after another instead of in parallel.
     concurrency:
-      group: roh-seat-monitor-${{ github.event.inputs.performance_id || '74463' }}
+      group: roh-seat-monitor-${{ github.event.inputs.performance_id || '74492' }}
       cancel-in-progress: false
     steps:
       - name: Check out repo
