@@ -7,7 +7,7 @@ on:
       performance_id:
         description: "ROH performance ID"
         required: false
-        default: "74463"
+        default: "74492"
       price_min:
         description: "Minimum ticket price to alert on"
         required: false
@@ -27,7 +27,7 @@ jobs:
     # creating this cache". Queuing (rather than canceling) keeps every
     # check's result, just run one after another instead of in parallel.
     concurrency:
-      group: roh-seat-monitor-${{ github.event.inputs.performance_id || '74492' }}
+      group: roh-seat-monitor-${{ github.event.inputs.performance_id || '74463' }}
       cancel-in-progress: false
     steps:
       - name: Check out repo
