@@ -30,10 +30,15 @@ import sys
 from pathlib import Path
 
 # ----------------- CONFIG -----------------
-# All of these can be overridden via environment variables / GitHub
-# Actions inputs, so the same script works for any future performance
-# without editing code.
-PERFORMANCE_ID = os.environ.get("PERFORMANCE_ID", "74492")
+# These are set via environment variables / GitHub Actions inputs, so
+# the same script works for any future performance without editing
+# code. PERFORMANCE_ID has no fallback default on purpose — every run
+# should always say exactly which performance it's checking (alerts
+# already tell you), rather than silently falling back to a stale ID
+# if the environment variable is somehow missing.
+PERFORMANCE_ID = os.environ.get("PERFORMANCE_ID")
+if not PERFORMANCE_ID:
+    raise SystemExit("PERFORMANCE_ID environment variable is required — none was provided.")
 
 URL = (
     f"https://www.rbo.org.uk/api/v2-proxy/TXN/Performances/{PERFORMANCE_ID}/Seats"
