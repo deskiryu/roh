@@ -33,7 +33,7 @@ from pathlib import Path
 # All of these can be overridden via environment variables / GitHub
 # Actions inputs, so the same script works for any future performance
 # without editing code.
-PERFORMANCE_ID = os.environ.get("PERFORMANCE_ID", "74463")
+PERFORMANCE_ID = os.environ.get("PERFORMANCE_ID", "74492")
 
 URL = (
     f"https://www.rbo.org.uk/api/v2-proxy/TXN/Performances/{PERFORMANCE_ID}/Seats"
