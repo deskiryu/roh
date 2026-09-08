@@ -75,7 +75,7 @@ COOKIE_HEADER = os.environ.get("COOKIE_HEADER", "")
 AVAILABLE_SEAT_STATUS_ID = 0
 
 # ntfy.sh topic name -- pick something unique/hard to guess, e.g.
-# "roh-perf74463-desmond-x9k2". Set via NTFY_TOPIC env var / GitHub
+# "roh-perf74492-desmond-x9k2". Set via NTFY_TOPIC env var / GitHub
 # secret so you don't have to commit it into the repo.
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "CHANGE-ME-roh-alert")
 
