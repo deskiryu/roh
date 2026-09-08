@@ -11,11 +11,11 @@ on:
       price_min:
         description: "Minimum ticket price to alert on"
         required: false
-        default: "10"
+        default: "39"
       price_max:
         description: "Maximum ticket price to alert on"
         required: false
-        default: "50"
+        default: "39"
 
 jobs:
   check-seats:
@@ -27,7 +27,7 @@ jobs:
     # creating this cache". Queuing (rather than canceling) keeps every
     # check's result, just run one after another instead of in parallel.
     concurrency:
-      group: roh-seat-monitor-${{ github.event.inputs.performance_id || '74463' }}
+      group: roh-seat-monitor-${{ github.event.inputs.performance_id }}
       cancel-in-progress: false
     steps:
       - name: Check out repo
@@ -51,8 +51,8 @@ jobs:
       - name: Restore seat state
         uses: actions/cache/restore@v4
         with:
-          path: last_state_${{ github.event.inputs.performance_id || '74463' }}.json
-          key: roh-state-v2-${{ github.event.inputs.performance_id || '74463' }}
+          path: last_state_${{ github.event.inputs.performance_id }}.json
+          key: roh-state-v2-${{ github.event.inputs.performance_id }}
 
       - name: Run seat check
         env:
@@ -72,11 +72,11 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh cache delete roh-state-v2-${{ github.event.inputs.performance_id || '74463' }} || true
+        run: gh cache delete roh-state-v2-${{ github.event.inputs.performance_id }} || true
 
       - name: Save seat state
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: last_state_${{ github.event.inputs.performance_id || '74463' }}.json
-          key: roh-state-v2-${{ github.event.inputs.performance_id || '74463' }}
+          path: last_state_${{ github.event.inputs.performance_id }}.json
+          key: roh-state-v2-${{ github.event.inputs.performance_id }}
