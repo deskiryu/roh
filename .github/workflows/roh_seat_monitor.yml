@@ -7,15 +7,15 @@ on:
       performance_id:
         description: "ROH performance ID"
         required: false
-        default: "74492"
+        default: "74498"
       price_min:
         description: "Minimum ticket price to alert on"
         required: false
-        default: "39"
+        default: "1"
       price_max:
         description: "Maximum ticket price to alert on"
         required: false
-        default: "39"
+        default: "53"
 
 jobs:
   check-seats:
