@@ -134,14 +134,17 @@ def get_target_price_zone_ids(prices):
 
 def send_notification(message):
     try:
-        requests.post(
+        r = requests.post(
             f"https://ntfy.sh/{NTFY_TOPIC}",
             data=message.encode("utf-8"),
             headers={"Title": "ROH Seat Alert"},
             timeout=10,
         )
+        print(f"  ntfy response: {r.status_code} {r.text[:200]}")
+        r.raise_for_status()
     except Exception as e:
         print(f"[warn] failed to send notification: {e}")
+        raise
 
 
 def extract_available_seats(data, target_zone_ids=None):
