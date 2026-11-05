@@ -7,7 +7,7 @@ on:
       performance_id:
         description: "ROH performance ID"
         required: false
-        default: "74498"
+        default: "74538"
       price_min:
         description: "Minimum ticket price to alert on"
         required: false
